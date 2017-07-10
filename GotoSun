@@ -1,0 +1,133 @@
+
+#include <DHT11/dht11.h>
+
+#define LED_STATUS "channel/widget1_0/data/light"  //开关标志位
+#define LED_CMD "channel/widget1_0/cmd/control"  //开关
+#define LONGITUDE_STATUS "channel/widget1_0/data/longitude" //经度
+#define LATITUDE_STATUS "channel/widget1_0/data/latitude" //纬度
+#define TEMPERATURE_STATUS "channel/widget1_0/data/temperature" //温度
+#define HUMIDITY_STATUS "channel/widget1_0/data/humidity"  //湿度
+#define ch1_status "channel/widget1_0/data/string"
+#define ch2_status "channel/widget1_0/data/string_1"
+#define ch3_status "channel/widget1_0/data/string_3"
+#define ch4_status "channel/widget1_0/data/string4"
+
+
+#define SWITCH_PIN D7
+unsigned char LedNum;
+
+DHT11 dht11 = DHT11(D0);
+
+void switchCb(uint8_t *payload, uint32_t len)
+{
+	aJsonClass aJson;
+    aJsonObject *root = aJson.parse((char *)payload);
+    if(root == NULL)
+    {
+        aJson.deleteItem(root);
+        return;
+    }
+
+    aJsonObject *_switch = aJson.getObjectItem(root, "switchEx");
+    
+    if(_switch != NULL)
+    {
+        LedNum++;
+        int SwitchKey = atoi(_switch->valuestring);
+        if(SwitchKey)
+    	{
+		    digitalWrite(SWITCH_PIN, HIGH);		// 打开开关
+		    IntoRobot.publish(LED_STATUS, 1);
+		    
+    	} 
+    	else 
+    	{
+	    	digitalWrite(SWITCH_PIN, LOW);		// 关闭开关
+	    	IntoRobot.publish(LED_STATUS, 0);
+    	}
+    }
+    aJson.deleteItem(root);
+	
+}
+
+Servo xServo;
+Servo yServo;
+int right,lift,bottom,top;
+int xpos,ypos;
+
+int i,sampleValue[4];
+unsigned char airTemperature,airHumidity;
+
+void setup()
+{
+// put your setup code here, to run once.
+    dht11.begin();
+    xServo.attach(D3);
+	yServo.attach(D2);
+    pinMode(SWITCH_PIN, OUTPUT);
+    IntoRobot.subscribe(LED_CMD, NULL, switchCb);
+}
+
+void loop() 
+{
+    airTemperature = dht11.ReadTemperature(0); 
+    airHumidity = dht11.ReadHumidity();
+   
+    IntoRobot.publish(TEMPERATURE_STATUS, airTemperature);
+    IntoRobot.publish(HUMIDITY_STATUS, airHumidity);
+    
+    //xpos = xServo.read();
+    //ypos = yServo.read();
+	
+	IntoRobot.publish(LONGITUDE_STATUS, xpos);
+    IntoRobot.publish(LATITUDE_STATUS, ypos);
+	
+	for (i=0;i<4;i++)
+	{
+		sampleValue[i] = analogRead(i+1);
+	}
+	
+	IntoRobot.publish(ch1_status, sampleValue[0]);
+	IntoRobot.publish(ch2_status, sampleValue[1]);
+	IntoRobot.publish(ch3_status, sampleValue[2]);
+	IntoRobot.publish(ch4_status, sampleValue[3]);
+	
+	right = sampleValue[0];
+	lift = sampleValue[1];
+	bottom = sampleValue[2];
+	top = sampleValue[3];
+	
+	int xchange = right - lift;
+	int ychange = top - bottom;
+	//IntoRobot.publish(ch1_status, ychange);
+	//IntoRobot.publish(ch2_status, xchange);
+	
+	if (xchange > 5)
+	{
+		xpos--;
+		if (xpos <= 0)
+		xpos = 0;
+	}
+	else if (xchange < -5)
+	{
+		xpos++;
+		if (xpos >= 180)
+		xpos = 180;
+	}
+	
+	if (ychange > 10)
+	{
+		ypos--;
+		if (ypos <= 0)
+		ypos = 0;
+	}
+	else if (ychange < -10)
+	{
+		ypos++;
+		if (ypos >= 180)
+		ypos = 180;
+	}
+	xServo.write(xpos);
+	yServo.write(ypos);
+	delay(5);
+}
